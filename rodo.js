@@ -1,95 +1,92 @@
 const admin = require("firebase-admin");
 
-// 1. SEGURANÇA MÁXIMA (ANTI-HACKER)
+// CONFIGURAÇÃO ROBUSTA: Lê a Secret que você colou no GitHub
 try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
     if (!admin.apps.length) {
-        admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
     }
 } catch (e) {
-    console.error("ERRO CRÍTICO: Chave Firebase inválida ou ausente.");
+    console.error("❌ Erro na Chave: Verifique o formato do JSON no GitHub Secrets.");
     process.exit(1);
 }
 
 const db = admin.firestore();
 
-async function superRoboInteligente() {
+async function roboMestrePro() {
     const API_KEY = process.env.API_KEY_ESPORTES;
-    const dataAtual = new Date().toISOString().split('T')[0]; // Pega a data de hoje (YYYY-MM-DD)
+    const dataHoje = new Date().toISOString().split('T')[0];
 
-    // URLs de coleta (Ligas e Jogos do Dia com Odds)
-    const urlLigas = `https://allsportsapi.com/api/football/?met=Leagues&APIkey=${API_KEY}`;
-    const urlJogos = `https://allsportsapi.com/api/football/?met=Fixtures&from=${dataAtual}&to=${dataAtual}&APIkey=${API_KEY}`;
+    // URLs para capturar Ligas e os Jogos (que contêm escudos e odds)
+    const urlJogos = `https://allsportsapi.com/api/football/?met=Fixtures&from=${dataHoje}&to=${dataHoje}&APIkey=${API_KEY}`;
 
-    console.log("🤖 Iniciando Super Robô: Coletando e Organizando...");
+    console.log("🤖 Robô Mestre-Pro: Iniciando organização inteligente...");
 
     try {
-        // Coleta Ligas e Jogos simultaneamente para ser rápido
-        const [resLigas, resJogos] = await Promise.all([fetch(urlLigas), fetch(urlJogos)]);
-        const ligasData = await resLigas.json();
-        const jogosData = await resJogos.json();
+        const response = await fetch(urlJogos);
+        const data = await response.json();
 
-        if (!ligasData.result || !jogosData.result) {
-            throw new Error("API falhou ao retornar dados essenciais.");
+        if (!data.result) {
+            console.log("ℹ️ Nenhum jogo encontrado para hoje.");
+            return;
         }
 
-        // 2. ORGANIZAÇÃO INTELIGENTE (PAÍS > LIGA > JOGOS)
-        const estruturaOrganizada = {};
+        const estrutura = {};
 
-        jogosData.result.forEach(jogo => {
+        // ORGANIZAÇÃO: País > Liga > Jogo (Com Escudos e Palpites)
+        data.result.forEach(jogo => {
             const pais = jogo.country_name;
             const liga = jogo.league_name;
 
-            if (!estruturaOrganizada[pais]) {
-                estruturaOrganizada[pais] = {
+            if (!estrutura[pais]) {
+                estrutura[pais] = {
                     nome: pais,
                     bandeira: jogo.country_logo,
                     ligas: {}
                 };
             }
 
-            if (!estruturaOrganizada[pais].ligas[liga]) {
-                estruturaOrganizada[pais].ligas[liga] = {
+            if (!estrutura[pais].ligas[liga]) {
+                estrutura[pais].ligas[liga] = {
                     nome: liga,
-                    logo_liga: jogo.league_logo,
-                    partidas: []
+                    logo: jogo.league_logo,
+                    jogos: []
                 };
             }
 
-            // 3. INTELIGÊNCIA DE PALPITES (LOGICA DE ODDS)
-            // Aqui o robô analisa quem é o favorito baseado nas odds
-            let palpite = "Equilibrado";
+            // INTELIGÊNCIA DE PALPITE: Baseado nas Odds da API
+            let sugestao = "Análise Pendente";
             if (jogo.odds) {
-                const home = parseFloat(jogo.odds.home_win);
-                const away = parseFloat(jogo.odds.away_win);
-                if (home < away && home < 2.0) palpite = `Favorito: ${jogo.event_home_team}`;
-                else if (away < home && away < 2.0) palpite = `Favorito: ${jogo.event_away_team}`;
+                const casa = parseFloat(jogo.odds.home_win);
+                const fora = parseFloat(jogo.odds.away_win);
+                if (casa < fora && casa < 1.8) sugestao = `Vitória: ${jogo.event_home_team}`;
+                else if (fora < casa && fora < 1.8) sugestao = `Vitória: ${jogo.event_away_team}`;
             }
 
-            estruturaOrganizada[pais].ligas[liga].partidas.push({
-                hora: jogo.event_time,
-                casa: jogo.event_home_team,
-                casa_escudo: jogo.home_team_logo,
-                fora: jogo.event_away_team,
-                fora_escudo: jogo.away_team_logo,
-                palpite: palpite,
-                placar: `${jogo.event_final_result || 'vs'}`
+            estrutura[pais].ligas[liga].jogos.push({
+                time_casa: jogo.event_home_team,
+                escudo_casa: jogo.home_team_logo,
+                time_fora: jogo.event_away_team,
+                escudo_fora: jogo.away_team_logo,
+                horario: jogo.event_time,
+                palpite: sugestao
             });
         });
 
-        // 4. SALVAMENTO ROBUSTO (PROTEÇÃO CONTRA ERROS DE ESCRITA)
-        await db.collection('central_esportes').doc('dashboard_vovo').set({
-            paises_ativos: estruturaOrganizada,
-            total_jogos_hoje: jogosData.result.length,
-            ultima_varredura: new Date().toLocaleString('pt-BR'),
-            seguranca: "Criptografia de Sessão Ativa"
+        // SALVAMENTO AUTOMÁTICO (Substitui os dados antigos pelos novos)
+        await db.collection('dados_esportivos').doc('hoje').set({
+            paises: estrutura,
+            ultima_atualizacao: new Date().toISOString(),
+            status: "Online"
         });
 
-        console.log("✅ MISSÃO CONCLUÍDA: Dados organizados e protegidos contra falhas.");
+        console.log("✅ Dados organizados com sucesso no Firebase!");
 
     } catch (error) {
-        console.error("⚠️ O Robô encontrou um obstáculo, mas permanece ativo:", error.message);
+        console.error("⚠️ Falha na coleta, mas o robô segue ativo:", error.message);
     }
 }
 
-superRoboInteligente();
+roboMestrePro();
