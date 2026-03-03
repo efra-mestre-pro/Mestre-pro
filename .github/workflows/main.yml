@@ -1,16 +1,16 @@
-name: Executar Rodo Inteligente
+name: Executar Rodo Ante Span
 
 on:
-  workflow_dispatch:  # Permite rodar manualmente
+  workflow_dispatch:  # rodar manualmente
   schedule:
-    - cron: '0 */6 * * *'  # Executa a cada 6 horas
+    - cron: '0 */6 * * *'  # rodar a cada 6 horas
 
 jobs:
   job_coleta:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Baixa o código do repositório
+      # 1️⃣ Baixa o código
       - uses: actions/checkout@v3
 
       # 2️⃣ Configura Node 18
@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: '18'
 
-      # 3️⃣ Instala dependências do Node
+      # 3️⃣ Instala dependências
       - name: Instalar dependências
         run: npm install
 
@@ -27,4 +27,8 @@ jobs:
         run: node rodo.js
         env:
           FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
-          API_KEY_ESPORTES: ${{ secrets.CHAVE_API_ESPORTES }}
+          API_1_URL: ${{ secrets.API_1_URL }}
+          API_2_URL: ${{ secrets.API_2_URL }}
+          API_3_URL: ${{ secrets.API_3_URL }}
+          API_4_URL: ${{ secrets.API_4_URL }}
+          API_5_URL: ${{ secrets.API_5_URL }}
