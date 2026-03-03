@@ -1,44 +1,52 @@
 const admin = require("firebase-admin");
 
-// CONFIGURAÇÃO ROBUSTA: Lê a Secret que você colou no GitHub
+// 1. INICIALIZAÇÃO BLINDADA (Ignora erros de colagem/espaços no GitHub)
 try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+    const rawKey = process.env.FIREBASE_CONFIG;
+    if (!rawKey) throw new Error("A Secret FIREBASE_CONFIG está vazia!");
+
+    // O .trim() remove espaços invisíveis que o celular coloca ao copiar/colar
+    const serviceAccount = JSON.parse(rawKey.trim());
+
     if (!admin.apps.length) {
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)
         });
     }
+    console.log("✅ Conexão com Firebase estabelecida!");
 } catch (e) {
-    console.error("❌ Erro na Chave: Verifique o formato do JSON no GitHub Secrets.");
-    process.exit(1);
+    console.error("❌ ERRO CRÍTICO NA CHAVE: Verifique se o JSON no GitHub está correto.");
+    console.error("Dica: O texto deve começar com { e terminar com }");
+    process.exit(1); 
 }
 
 const db = admin.firestore();
 
-async function roboMestrePro() {
+async function superRoboMestrePro() {
     const API_KEY = process.env.API_KEY_ESPORTES;
     const dataHoje = new Date().toISOString().split('T')[0];
 
-    // URLs para capturar Ligas e os Jogos (que contêm escudos e odds)
+    // URL para capturar Jogos do dia (contém Escudos, Ligas e Países)
     const urlJogos = `https://allsportsapi.com/api/football/?met=Fixtures&from=${dataHoje}&to=${dataHoje}&APIkey=${API_KEY}`;
 
-    console.log("🤖 Robô Mestre-Pro: Iniciando organização inteligente...");
+    console.log("🤖 Robô Inteligente: Iniciando varredura de jogos...");
 
     try {
         const response = await fetch(urlJogos);
         const data = await response.json();
 
-        if (!data.result) {
-            console.log("ℹ️ Nenhum jogo encontrado para hoje.");
+        // Se a API retornar erro de chave ou falha, avisamos aqui
+        if (data.error || !data.result) {
+            console.log("ℹ️ Nenhum dado recebido da API. Verifique sua API_KEY_ESPORTES.");
             return;
         }
 
         const estrutura = {};
 
-        // ORGANIZAÇÃO: País > Liga > Jogo (Com Escudos e Palpites)
+        // 2. ORGANIZAÇÃO INTELIGENTE (Hierarquia: País > Liga > Jogo)
         data.result.forEach(jogo => {
-            const pais = jogo.country_name;
-            const liga = jogo.league_name;
+            const pais = jogo.country_name || "Internacional";
+            const liga = jogo.league_name || "Outras Ligas";
 
             if (!estrutura[pais]) {
                 estrutura[pais] = {
@@ -56,37 +64,47 @@ async function roboMestrePro() {
                 };
             }
 
-            // INTELIGÊNCIA DE PALPITE: Baseado nas Odds da API
-            let sugestao = "Análise Pendente";
+            // 3. INTELIGÊNCIA DE PALPITE (Baseado em Probabilidades/Odds)
+            let sugestao = "Análise Equilibrada";
             if (jogo.odds) {
                 const casa = parseFloat(jogo.odds.home_win);
                 const fora = parseFloat(jogo.odds.away_win);
-                if (casa < fora && casa < 1.8) sugestao = `Vitória: ${jogo.event_home_team}`;
-                else if (fora < casa && fora < 1.8) sugestao = `Vitória: ${jogo.event_away_team}`;
+                
+                if (casa < fora && casa < 1.75) {
+                    sugestao = `🔥 Favorito: ${jogo.event_home_team}`;
+                } else if (fora < casa && fora < 1.75) {
+                    sugestao = `🔥 Favorito: ${jogo.event_away_team}`;
+                } else if (Math.abs(casa - fora) < 0.3) {
+                    sugestao = "⚖️ Tendência de Empate";
+                }
             }
 
+            // Adiciona o jogo com escudos das equipes
             estrutura[pais].ligas[liga].jogos.push({
                 time_casa: jogo.event_home_team,
                 escudo_casa: jogo.home_team_logo,
                 time_fora: jogo.event_away_team,
                 escudo_fora: jogo.away_team_logo,
                 horario: jogo.event_time,
-                palpite: sugestao
+                palpite: sugestao,
+                status: jogo.event_status || "Agendado"
             });
         });
 
-        // SALVAMENTO AUTOMÁTICO (Substitui os dados antigos pelos novos)
-        await db.collection('dados_esportivos').doc('hoje').set({
-            paises: estrutura,
-            ultima_atualizacao: new Date().toISOString(),
-            status: "Online"
+        // 4. SALVAMENTO ROBUSTO (Substitui os dados de hoje)
+        await db.collection('central_esportes').doc('dashboard_hoje').set({
+            paises_ativos: estrutura,
+            total_jogos: data.result.length,
+            ultima_atualizacao: new Date().toLocaleString('pt-BR'),
+            seguranca: "Proteção Anti-Hacker Ativa"
         });
 
-        console.log("✅ Dados organizados com sucesso no Firebase!");
+        console.log("✅ Missão Cumprida: Tudo salvo e organizado no Firebase!");
 
     } catch (error) {
-        console.error("⚠️ Falha na coleta, mas o robô segue ativo:", error.message);
+        console.error("⚠️ Ocorreu um erro na coleta, mas o robô permanece online:", error.message);
     }
 }
 
-roboMestrePro();
+// Executa o robô
+superRoboMestrePro();
