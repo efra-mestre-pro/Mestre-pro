@@ -18,5 +18,5 @@ jobs:
           npm install
           node rodo.js
         env:
-          FIREBASE_CONFIG: ${{ secrets.CONFIG_FIREBASE }}
+          FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
           API_KEY_ESPORTES: ${{ secrets.CHAVE_API_ESPORTES }}
