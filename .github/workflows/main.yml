@@ -1,0 +1,30 @@
+name: Executar Rodo Inteligente
+
+on:
+  workflow_dispatch:  # Permite rodar manualmente
+  schedule:
+    - cron: '0 */6 * * *'  # Executa a cada 6 horas
+
+jobs:
+  job_coleta:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Baixa o código do repositório
+      - uses: actions/checkout@v3
+
+      # 2️⃣ Configura Node 18
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # 3️⃣ Instala dependências do Node
+      - name: Instalar dependências
+        run: npm install
+
+      # 4️⃣ Executa o robô
+      - name: Rodar Rodo.js
+        run: node rodo.js
+        env:
+          FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
+          API_KEY_ESPORTES: ${{ secrets.CHAVE_API_ESPORTES }}
