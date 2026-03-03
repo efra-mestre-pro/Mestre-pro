@@ -1,12 +1,22 @@
 const admin = require('firebase-admin');
 
-// Configuração via Secret do GitHub
-const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+// Tenta ler a configuração com segurança
+let serviceAccount;
+try {
+    const config = process.env.FIREBASE_CONFIG;
+    if (!config) throw new Error("A variável FIREBASE_CONFIG está vazia!");
+    serviceAccount = JSON.parse(config);
+} catch (e) {
+    console.error("❌ ERRO NA CHAVE FIREBASE:");
+    console.error("O texto que você colou no GitHub Secrets não é um JSON válido.");
+    console.error("Dica: Certifique-se de que colou o conteúdo do arquivo .json INTEIRO.");
+    process.exit(1); // Para o robô aqui porque sem chave não há como salvar
+}
 
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
 }
 
 const db = admin.firestore();
