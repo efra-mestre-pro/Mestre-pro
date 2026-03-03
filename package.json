@@ -1,0 +1,8 @@
+{
+  "name": "rodo-esportes",
+  "version": "1.0.0",
+  "dependencies": {
+    "firebase": "^10.0.0",
+    "node-fetch": "^2.6.7"
+  }
+}
