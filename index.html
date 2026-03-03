@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Meu Site de Esportes</title>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <h1>Resultados do Robô:</h1>
+    <div id="resultado">Carregando dados...</div>
+
+    <script>
+        // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCR9jaBybaf0spwWTS-Pk4IFvVQ9pJPkFk",
+  authDomain: "mestre-pro-41d7d.firebaseapp.com",
+  projectId: "mestre-pro-41d7d",
+  storageBucket: "mestre-pro-41d7d.firebasestorage.app",
+  messagingSenderId: "983820072855",
+  appId: "1:983820072855:web:9c516274a55457b80ef6d2"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+        // Inicializa o banco de dados
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Essa função vai na "pasta" que o robô criou e pega os dados
+        db.collection('dados_api').doc('ligas_futebol').get().then((doc) => {
+            if (doc.exists) {
+                // Mostra os dados na tela do celular
+                document.getElementById('resultado').innerHTML = 
+                    "<pre>" + JSON.stringify(doc.data().conteudo, null, 2) + "</pre>";
+            } else {
+                document.getElementById('resultado').innerHTML = "O robô ainda não rodou!";
+            }
+        });
+    </script>
+</body>
+</html>
