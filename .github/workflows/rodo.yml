@@ -35,4 +35,5 @@ jobs:
           API_2_URL: ${{ secrets.API_2_URL }}
           API_3_URL: ${{ secrets.API_3_URL }}
           API_4_URL: ${{ secrets.API_4_URL }}
-          API_4_KEY: ${{ secrets.API_4_KEY }}
+          API_4_KEY_1: ${{ secrets.API_4_KEY_1 }}
+          API_4_KEY_2: ${{ secrets.API_4_KEY_2 }}
