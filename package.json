@@ -1,6 +1,9 @@
 {
-  "name": "rodo-esportes",
+  "name": "antespan-enterprise-robo",
   "version": "1.0.0",
+  "description": "Robô Enterprise Multi-API",
+  "main": "rodo.js",
+  "type": "commonjs",
   "dependencies": {
     "firebase-admin": "^12.0.0",
     "node-fetch": "^2.6.7"
