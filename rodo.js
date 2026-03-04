@@ -1,120 +1,168 @@
 const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 
-// 1️⃣ Inicialização Firebase
-try {
-  const rawKey = process.env.FIREBASE_CONFIG;
-  if (!rawKey) throw new Error("❌ FIREBASE_CONFIG vazia!");
-  const serviceAccount = JSON.parse(rawKey.trim());
-  serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
-  if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
+// ============================
+// 🔐 FIREBASE INIT SEGURO
+// ============================
+
+function initFirebase() {
+  try {
+    if (!process.env.FIREBASE_CONFIG) {
+      throw new Error("FIREBASE_CONFIG não encontrada.");
+    }
+
+    const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG.trim());
+    serviceAccount.private_key =
+      serviceAccount.private_key.replace(/\\n/g, "\n");
+
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+      });
+    }
+
+    console.log("Firebase conectado com sucesso.");
+  } catch (err) {
+    console.error("Erro ao iniciar Firebase:", err.message);
+    process.exit(1);
   }
-  console.log("✅ Conexão com Firebase estabelecida!");
-} catch (e) {
-  console.error("❌ ERRO CRÍTICO NA CHAVE:", e.message);
-  process.exit(1);
 }
 
+initFirebase();
 const db = admin.firestore();
 
-// 2️⃣ Lista de APIs diferentes
-const APIS = [
-  { nome: "APIfootballcom", url: process.env.API_1_URL },
-  { nome: "AllSportsAPI", url: process.env.API_2_URL },
-  { nome: "API Sports", url: process.env.API_3_URL },
-  { nome: "Free API Live Football Data", url: process.env.API_4_URL, headers: { "X-RapidAPI-Key": process.env.API_4_KEY, "X-RapidAPI-Host": "football-data.org" } },
-].filter(api => api.url);
+// ============================
+// 🛰 CONFIGURAÇÃO APIs
+// ============================
 
-// 3️⃣ Coleta de dados com fallback
-async function coletarDados() {
-  const dataHoje = new Date().toISOString().split("T")[0];
-  for (let i = 0; i < APIS.length; i++) {
-    const api = APIS[i];
-    const url = api.url.replace("{DATA}", dataHoje);
-    console.log(`🔎 Tentando ${api.nome}...`);
+const APIS = [
+  { nome: "API_1", url: process.env.API_1_URL?.trim() },
+  { nome: "API_2", url: process.env.API_2_URL?.trim() },
+  { nome: "API_3", url: process.env.API_3_URL?.trim() },
+  {
+    nome: "API_4",
+    url: process.env.API_4_URL?.trim(),
+    headers: {
+      "X-RapidAPI-Key": process.env.API_4_KEY,
+      "X-RapidAPI-Host": "football-data.org",
+    },
+  },
+].filter(api => api.url && api.url.startsWith("http"));
+
+// ============================
+// 🔄 RETRY INTERNO
+// ============================
+
+async function fetchWithRetry(url, options = {}, retries = 3) {
+  for (let i = 1; i <= retries; i++) {
     try {
-      const response = await fetch(url, api.headers ? { headers: api.headers } : {});
-      const text = await response.text();
-      let data;
-      try { data = JSON.parse(text); } catch { console.warn(`⚠️ ${api.nome} não retornou JSON válido.`); continue; }
-      if (!data.result && !data.matches) { console.warn(`⚠️ ${api.nome} não trouxe resultados.`); continue; }
-      const jogos = data.result || data.matches || [];
-      console.log(`✅ ${api.nome} retornou ${jogos.length} jogos.`);
-      return jogos;
+      const res = await fetch(url, { ...options, timeout: 15000 });
+      const text = await res.text();
+      return JSON.parse(text);
     } catch (err) {
-      console.warn(`⚠️ Falha na ${api.nome}: ${err.message}`);
+      console.log(`Tentativa ${i} falhou:`, err.message);
+      if (i === retries) throw err;
+      await new Promise(r => setTimeout(r, 5000));
     }
   }
-  console.error("❌ Todas as APIs falharam ou não retornaram resultados!");
+}
+
+// ============================
+// 📡 COLETA MULTI API
+// ============================
+
+async function coletarDados() {
+  const hoje = new Date().toISOString().split("T")[0];
+
+  for (const api of APIS) {
+    try {
+      console.log("Tentando:", api.nome);
+
+      const urlFinal = api.url.replace("{DATA}", hoje);
+      const data = await fetchWithRetry(urlFinal, {
+        headers: api.headers || {},
+      });
+
+      const jogos = data.result || data.matches || [];
+
+      if (Array.isArray(jogos) && jogos.length > 0) {
+        console.log("API ativa:", api.nome);
+        return jogos;
+      }
+    } catch (err) {
+      console.log("Erro na API:", api.nome);
+    }
+  }
+
   return null;
 }
 
-// 4️⃣ Função principal
-async function superRoboMestrePro() {
-  const dataHoje = new Date().toISOString().split("T")[0];
-  const jogos = await coletarDados();
-  if (!jogos) return;
+// ============================
+// 🧠 CLASSIFICAÇÃO PROFISSIONAL
+// ============================
 
-  const estrutura = {};
-  const greenDoDia = [];
+function classificarJogo(j) {
+  const status = j.event_status || j.status || "NS";
+  const resultado = j.event_final_result || null;
+
+  if (resultado) return "green";
+  if (status === "NS" || status === "TIMED") return "comboio";
+  return "risco";
+}
+
+// ============================
+// 🚀 EXECUÇÃO PRINCIPAL
+// ============================
+
+async function executar() {
+  const jogos = await coletarDados();
+
+  if (!jogos) {
+    console.log("Nenhuma API retornou dados.");
+    return;
+  }
+
+  const green = [];
   const risco = [];
   const comboio = [];
 
-  jogos.forEach(jogo => {
-    const pais = jogo.country_name || "Internacional";
-    const liga = jogo.league_name || "Outras Ligas";
+  jogos.forEach(j => {
+    const tipo = classificarJogo(j);
 
-    if (!estrutura[pais]) estrutura[pais] = { nome: pais, bandeira: jogo.country_logo || null, ligas: {} };
-    if (!estrutura[pais].ligas[liga]) estrutura[pais].ligas[liga] = { nome: liga, logo: jogo.league_logo || null, jogos: [] };
-
-    // Palpites inteligentes
-    let sugestao = "Análise Equilibrada";
-    let tipo = "risco";
-
-    if (jogo.odds) {
-      const casa = parseFloat(jogo.odds.home_win);
-      const fora = parseFloat(jogo.odds.away_win);
-      if (!isNaN(casa) && !isNaN(fora)) {
-        if (casa < fora && casa < 1.75) { sugestao = `🔥 Favorito: ${jogo.event_home_team}`; tipo = "green"; }
-        else if (fora < casa && fora < 1.75) { sugestao = `🔥 Favorito: ${jogo.event_away_team}`; tipo = "green"; }
-        else if (Math.abs(casa - fora) < 0.3) { sugestao = "⚖️ Empate Provável"; tipo = "comboio"; }
-      }
-    }
-
-    const jogoItem = {
-      time_casa: jogo.event_home_team || jogo.homeTeam?.name,
-      escudo_casa: jogo.home_team_logo || jogo.homeTeam?.logo || null,
-      time_fora: jogo.event_away_team || jogo.awayTeam?.name,
-      escudo_fora: jogo.away_team_logo || jogo.awayTeam?.logo || null,
-      horario: jogo.event_time || jogo.utcDate || "Indefinido",
-      palpite: sugestao,
-      status: jogo.event_status || jogo.status || "Agendado",
-      resultado: jogo.event_final_result || null,
+    const item = {
+      casa: j.event_home_team || j.homeTeam?.name,
+      fora: j.event_away_team || j.awayTeam?.name,
+      horario: j.event_time || j.utcDate || null,
+      status: j.event_status || j.status || null,
+      resultado: j.event_final_result || null,
     };
 
-    estrutura[pais].ligas[liga].jogos.push(jogoItem);
-
-    if (tipo === "green") greenDoDia.push(jogoItem);
-    else if (tipo === "comboio") comboio.push(jogoItem);
-    else risco.push(jogoItem);
+    if (tipo === "green") green.push(item);
+    else if (tipo === "comboio") comboio.push(item);
+    else risco.push(item);
   });
 
-  // Ordena por horário
-  for (const pais in estrutura) for (const liga in estrutura[pais].ligas) estrutura[pais].ligas[liga].jogos.sort((a,b)=>a.horario.localeCompare(b.horario));
+  const hoje = new Date().toISOString().split("T")[0];
 
-  // Salva no Firestore
-  const dashboardDoc = db.collection("central_esportes").doc("dashboard_hoje");
-  const historicoDoc = db.collection("central_esportes").doc(`historico_${dataHoje.replace(/-/g,"")}`);
+  const payload = {
+    sistema: "AnteSpan Enterprise",
+    data: hoje,
+    totalJogos: jogos.length,
+    greenDoDia: green,
+    risco,
+    comboio,
+    atualizadoEm: new Date().toISOString(),
+  };
 
-  const dadosParaSalvar = { paises_ativos: estrutura, total_jogos: jogos.length, ultima_atualizacao: new Date().toLocaleString("pt-BR"), abas_site: { greenDoDia, risco, comboio }, seguranca: "Proteção Anti-Hacker Ativa" };
+  await db.collection("central_esportes")
+    .doc("dashboard_hoje")
+    .set(payload);
 
-  await dashboardDoc.set(dadosParaSalvar);
-  await historicoDoc.set(dadosParaSalvar);
+  await db.collection("backup_diario")
+    .doc(hoje.replace(/-/g, ""))
+    .set(payload);
 
-  console.log("✅ Robô Ante Span multi-API: Dashboard atualizado com Green, Comboio e Risco!");
+  console.log("Sistema atualizado com sucesso.");
 }
 
-superRoboMestrePro();
+executar();
