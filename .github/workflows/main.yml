@@ -1,28 +1,23 @@
-name: Executar Rodo Ante Span
+name: Executar Rodo Ante Span Multi-API
 
 on:
-  workflow_dispatch:  # rodar manualmente
+  workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *'  # rodar a cada 6 horas
+    - cron: '0 */6 * * *'
 
 jobs:
   job_coleta:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Baixa o código
       - uses: actions/checkout@v3
-
-      # 2️⃣ Configura Node 18
       - uses: actions/setup-node@v3
         with:
           node-version: '18'
 
-      # 3️⃣ Instala dependências
       - name: Instalar dependências
         run: npm install
 
-      # 4️⃣ Executa o robô
       - name: Rodar Rodo.js
         run: node rodo.js
         env:
@@ -31,4 +26,4 @@ jobs:
           API_2_URL: ${{ secrets.API_2_URL }}
           API_3_URL: ${{ secrets.API_3_URL }}
           API_4_URL: ${{ secrets.API_4_URL }}
-          API_5_URL: ${{ secrets.API_5_URL }}
+          API_4_KEY: ${{ secrets.API_4_KEY }}
