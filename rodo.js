@@ -2,7 +2,7 @@ const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 
 // ============================
-// 🌍 TIMEZONE OFICIAL
+// 🌍 TIMEZONE MAPUTO
 // ============================
 
 const TIMEZONE = "Africa/Maputo";
@@ -33,7 +33,7 @@ function initFirebase() {
       });
     }
 
-    console.log("Firebase conectado.");
+    console.log("Firebase conectado com sucesso.");
   } catch (err) {
     console.error("Erro Firebase:", err.message);
     process.exit(1);
@@ -44,13 +44,22 @@ initFirebase();
 const db = admin.firestore();
 
 // ============================
-// 🔑 RAPIDAPI KEYS (2 CHAVES)
+// 🔑 CONFIGURAÇÃO APIs
 // ============================
 
+const APIS = [
+  { nome: "API_1", url: process.env.API_1_URL },
+  { nome: "API_2", url: process.env.API_2_URL },
+  { nome: "API_3", url: process.env.API_3_URL }
+].filter(a => a.url && a.url.startsWith("http"));
+
+// API 4 integrada: AllSports + RapidAPI
+const API_4_URL = process.env.API_4_URL || "https://allsportsapi2.p.rapidapi.com/soccer/matches?date={DATA}";
+
 const RAPID_KEYS = [
-  process.env.API_4_KEY_1,
-  process.env.API_4_KEY_2
-].filter(Boolean);
+  { host: "allsportsapi2.p.rapidapi.com", key: process.env.ALLSPORTS_KEY },
+  { host: "football-data.org", key: process.env.X_RAPIDAPI_KEY }
+].filter(a => a.key);
 
 // ============================
 // 🔄 FETCH COM RETRY
@@ -62,15 +71,10 @@ async function fetchWithRetry(url, options = {}, retries = 3) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
 
-      const res = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-      });
-
+      const res = await fetch(url, { ...options, signal: controller.signal });
       clearTimeout(timeout);
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
       return await res.json();
     } catch (err) {
       console.log(`Tentativa ${i} falhou:`, err.message);
@@ -81,20 +85,14 @@ async function fetchWithRetry(url, options = {}, retries = 3) {
 }
 
 // ============================
-// 📡 COLETA DADOS
+// 📡 COLETA DE DADOS
 // ============================
 
 async function coletarDados() {
   const hoje = getMaputoDate();
   console.log("Data Maputo:", hoje);
 
-  // APIs normais
-  const APIS = [
-    { nome: "API_1", url: process.env.API_1_URL },
-    { nome: "API_2", url: process.env.API_2_URL },
-    { nome: "API_3", url: process.env.API_3_URL }
-  ].filter(a => a.url && a.url.startsWith("http"));
-
+  // Primeiro APIs normais
   for (const api of APIS) {
     try {
       console.log("Tentando:", api.nome);
@@ -102,40 +100,35 @@ async function coletarDados() {
       const data = await fetchWithRetry(url);
 
       const jogos = data.result || data.matches || [];
-
       if (jogos.length > 0) {
         console.log("API ativa:", api.nome);
         return jogos;
       }
     } catch {
-      console.log("Erro:", api.nome);
+      console.log("Falhou API:", api.nome);
     }
   }
 
-  // RapidAPI fallback com 2 chaves
-  if (process.env.API_4_URL && RAPID_KEYS.length > 0) {
-    for (const key of RAPID_KEYS) {
-      try {
-        console.log("Tentando RapidAPI...");
+  // Depois RapidAPI / AllSports
+  for (const api of RAPID_KEYS) {
+    try {
+      console.log("Tentando API:", api.host);
+      const urlFinal = API_4_URL.replace("{DATA}", hoje);
 
-        const url = process.env.API_4_URL.replace("{DATA}", hoje);
-
-        const data = await fetchWithRetry(url, {
-          headers: {
-            "X-RapidAPI-Key": key,
-            "X-RapidAPI-Host": "allsportsapi2.p.rapidapi.com"
-          }
-        });
-
-        const jogos = data.result || data.matches || [];
-
-        if (jogos.length > 0) {
-          console.log("RapidAPI ativa.");
-          return jogos;
+      const data = await fetchWithRetry(urlFinal, {
+        headers: {
+          "X-RapidAPI-Key": api.key,
+          "X-RapidAPI-Host": api.host
         }
-      } catch {
-        console.log("Chave falhou, tentando próxima...");
+      });
+
+      const jogos = data.result || data.matches || [];
+      if (jogos.length > 0) {
+        console.log("API ativa:", api.host);
+        return jogos;
       }
+    } catch {
+      console.log("Falhou API:", api.host);
     }
   }
 
@@ -143,7 +136,7 @@ async function coletarDados() {
 }
 
 // ============================
-// 🧠 CLASSIFICAÇÃO
+// 🧠 CLASSIFICAÇÃO JOGOS
 // ============================
 
 function classificarJogo(j) {
@@ -173,7 +166,6 @@ async function executar() {
 
   jogos.forEach(j => {
     const tipo = classificarJogo(j);
-
     const item = {
       casa: j.event_home_team || j.homeTeam?.name,
       fora: j.event_away_team || j.awayTeam?.name,
@@ -181,14 +173,12 @@ async function executar() {
       status: j.event_status || j.status || null,
       resultado: j.event_final_result || null,
     };
-
     if (tipo === "green") green.push(item);
     else if (tipo === "comboio") comboio.push(item);
     else risco.push(item);
   });
 
   const hoje = getMaputoDate();
-
   const payload = {
     sistema: "AnteSpan Enterprise",
     timezone: TIMEZONE,
@@ -200,13 +190,8 @@ async function executar() {
     atualizadoEm: new Date().toISOString(),
   };
 
-  await db.collection("central_esportes")
-    .doc("dashboard_hoje")
-    .set(payload);
-
-  await db.collection("backup_diario")
-    .doc(hoje.replace(/-/g, ""))
-    .set(payload);
+  await db.collection("central_esportes").doc("dashboard_hoje").set(payload);
+  await db.collection("backup_diario").doc(hoje.replace(/-/g, "")).set(payload);
 
   console.log("Sistema atualizado com sucesso.");
 }
